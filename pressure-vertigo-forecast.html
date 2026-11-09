@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pressure &amp; Vertigo Forecast</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f4f3ef;
+    --surface-1: #fcfcfb;
+    --surface-2: #f0efec;
+    --border: #e2e0da;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7973;
+    --series-1: #2a78d6;
+    --series-muted: #9ec5f4;
+    --accent: #2a78d6;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
+    --band-mod: rgba(250,178,25,.20);
+    --band-high: rgba(208,59,59,.18);
+    --grid: #e7e5df;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --surface-2: #242422;
+      --border: #33332f;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8f8e86;
+      --series-1: #3987e5;
+      --series-muted: #256abf;
+      --accent: #5598e7;
+      --band-mod: rgba(250,178,25,.16);
+      --band-high: rgba(208,59,59,.24);
+      --grid: #2c2c29;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface-0); color: var(--text-primary);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 24px 18px 60px; }
+  header h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -.01em; }
+  header p { margin: 0; color: var(--text-secondary); }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px; margin-top: 16px;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  input, select, textarea, button {
+    font: inherit; color: inherit; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px;
+  }
+  input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { cursor: pointer; font-weight: 600; }
+  button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .55; cursor: default; }
+  #zip { width: 130px; font-size: 17px; letter-spacing: .05em; }
+  .status { margin-top: 10px; color: var(--text-secondary); min-height: 1.5em; }
+  .status.err { color: var(--critical); }
+  .hidden { display: none !important; }
+
+  .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .hero { grid-template-columns: 1fr; } }
+  .now-level { display: flex; align-items: center; gap: 12px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; font-weight: 700;
+    border-radius: 999px; padding: 3px 11px 3px 8px; font-size: 13px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text-primary); white-space: nowrap;
+  }
+  .badge .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .lvl-low .dot { background: var(--good); }
+  .lvl-mod .dot { background: var(--warning); }
+  .lvl-high .dot { background: var(--critical); }
+  .big { font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+  .sub { color: var(--text-secondary); font-size: 14px; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+  .kpi { background: var(--surface-2); border-radius: 10px; padding: 10px; }
+  .kpi .k { font-size: 12px; color: var(--text-secondary); }
+  .kpi .v { font-size: 18px; font-weight: 700; }
+  .headline { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+
+  .days { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 8px; }
+  @media (max-width: 860px) { .days { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+  @media (max-width: 480px) { .days { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  .day { background: var(--surface-2); border-radius: 11px; padding: 10px; border: 2px solid transparent; }
+  .day.lvl-high { border-color: var(--critical); }
+  .day.lvl-mod { border-color: var(--warning); }
+  .day .dname { font-weight: 700; }
+  .day .ddate { font-size: 12px; color: var(--text-muted); }
+  .day .dchg { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+  .day .badge { margin-top: 6px; font-size: 12px; }
+
+  h2 { font-size: 17px; margin: 0 0 4px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-wrap: wrap; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
+  .chart-box { position: relative; margin-top: 10px; }
+  svg#chart { width: 100%; height: auto; display: block; touch-action: pan-y; }
+  #chart text { fill: var(--text-muted); font-size: 11px; }
+  .tip {
+    position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 9px; padding: 8px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    min-width: 170px; transform: translate(-50%, -110%); white-space: nowrap;
+  }
+  .tip b { display: block; margin-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-secondary); font-weight: 600; }
+  .table-scroll { max-height: 320px; overflow: auto; margin-top: 10px; }
+
+  .coach-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .coach-grid { grid-template-columns: 1fr; } }
+  .tips { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 8px; }
+  .tips li { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+  .tips li .tt { font-weight: 700; display: block; }
+  .tips li .tag { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+  .chat { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .msgs { max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+  .msg { padding: 9px 12px; border-radius: 11px; max-width: 92%; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; }
+  .msg.bot { align-self: flex-start; background: var(--surface-2); }
+  .row { display: flex; gap: 8px; }
+  .row input { flex: 1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; padding: 5px 10px; border-radius: 999px; font-weight: 500; }
+  details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+  .note { font-size: 12px; color: var(--text-muted); }
+  .log-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; }
+  .log-list li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .log-list button { padding: 2px 8px; font-size: 12px; }
+  .sev { display: flex; gap: 6px; }
+  .sev button { width: 38px; padding: 7px 0; }
+  .sev button.on { background: var(--accent); color: #fff; border-color: transparent; }
+  .disclaimer { font-size: 12px; color: var(--text-muted); margin-top: 22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Pressure &amp; Vertigo Forecast</h1>
+    <p>Hourly barometric pressure for your zip code, with the swings most likely to trigger dizziness and balance trouble flagged in advance.</p>
+  </header>
+
+  <section class="card">
+    <form id="form" class="controls" novalidate>
+      <div class="field" style="flex-basis:100%">
+        <label for="cond">Your condition</label>
+        <select id="cond" style="max-width:520px"></select>
+        <div class="note" id="condNote"></div>
+      </div>
+      <div class="field">
+        <label for="zip">US zip code</label>
+        <input id="zip" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="30303" required>
+      </div>
+      <div class="field">
+        <label for="sens">Your sensitivity</label>
+        <select id="sens">
+          <option value="high">High: small swings bother me</option>
+          <option value="normal" selected>Normal</option>
+          <option value="low">Low: only big swings</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="units">Units</label>
+        <select id="units">
+          <option value="inhg" selected>inHg</option>
+          <option value="hpa">hPa / mb</option>
+        </select>
+      </div>
+      <button class="primary" type="button" id="go">Get forecast</button>
+    </form>
+    <div class="status" id="status" role="status"></div>
+  </section>
+
+  <div id="results" class="hidden">
+    <section class="card hero">
+      <div>
+        <div class="sub" id="place"></div>
+        <div class="now-level" style="margin-top:6px">
+          <div class="big" id="nowP">--</div>
+          <span class="badge" id="nowBadge"><span class="dot"></span><span></span></span>
+        </div>
+        <div class="sub" id="nowTrend"></div>
+        <div class="kpis">
+          <div class="kpi"><div class="k">Last 3 hrs</div><div class="v" id="k3">--</div></div>
+          <div class="kpi"><div class="k">Last 24 hrs</div><div class="v" id="k24">--</div></div>
+          <div class="kpi"><div class="k">Next 24 hrs</div><div class="v" id="kn24">--</div></div>
+        </div>
+      </div>
+      <div>
+        <p class="headline" id="outlook"></p>
+        <div class="sub" id="outlookDetail"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>7-day risk outlook</h2>
+      <div class="sub">Each day shows its highest risk level and the biggest 24-hour pressure swing.</div>
+      <div class="days" id="days" style="margin-top:12px"></div>
+    </section>
+
+    <section class="card">
+      <div class="chart-head">
+        <div>
+          <h2>Barometric pressure, hour by hour</h2>
+          <div class="sub">Past 2 days and the next 7. Shaded hours are when pressure is changing fast.</div>
+        </div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--series-1);height:3px"></i>Pressure</span>
+          <span><i class="sw" style="background:var(--band-mod);outline:1px solid var(--warning)"></i>Moderate risk</span>
+          <span><i class="sw" style="background:var(--band-high);outline:1px solid var(--critical)"></i>High risk</span>
+          <span><i class="sw" style="background:var(--text-secondary);width:9px;height:9px;border-radius:50%"></i>Your logged symptoms</span>
+        </div>
+      </div>
+      <div class="chart-box" id="chartBox">
+        <svg id="chart" viewBox="0 0 960 300" role="img" aria-label="Hourly barometric pressure chart"></svg>
+        <div class="tip hidden" id="tip"></div>
+      </div>
+      <details style="margin-top:10px">
+        <summary>Show as a table</summary>
+        <div class="table-scroll"><table id="tbl"></table></div>
+      </details>
+    </section>
+
+    <section class="card coach-grid">
+      <div>
+        <h2>Your coach: tips for this forecast</h2>
+        <div class="sub">Based on the pressure pattern ahead and anything you've logged.</div>
+        <ul class="tips" id="tips"></ul>
+      </div>
+      <div>
+        <h2>Ask the AI coach</h2>
+        <div class="sub">Ask about the forecast, planning your week, or managing a flare. It sees your forecast and symptom log.</div>
+        <div id="keyBox" style="margin-top:10px">
+          <div class="note">The AI coach runs on Claude through your own Anthropic API key. Your key stays in this browser and goes only to api.anthropic.com. The tips on the left work without a key.</div>
+          <div class="row" style="margin-top:8px">
+            <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
+            <button id="saveKey" type="button">Save key</button>
+          </div>
+        </div>
+        <div class="chat" id="chat">
+          <div class="chips" id="chips">
+            <button class="chip ghost" type="button">How should I plan my week?</button>
+            <button class="chip ghost" type="button">I'm dizzy right now. What can I do?</button>
+            <button class="chip ghost" type="button">Is it a good day to fly or drive into the mountains?</button>
+          </div>
+          <div class="msgs" id="msgs"></div>
+          <form class="row" id="chatForm" novalidate>
+            <input id="chatIn" placeholder="Ask the coach..." autocomplete="off">
+            <button class="primary" type="button" id="chatSend">Send</button>
+          </form>
+          <button type="button" class="ghost note" id="forgetKey" style="align-self:flex-start;border:none;padding:0">Remove saved key</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Symptom log</h2>
+      <div class="sub">Log episodes as they happen. Over a few weeks the app learns which pressure swings set you off, and the markers show up on the chart.</div>
+      <div class="controls" style="margin-top:12px">
+        <div class="field">
+          <label>Severity (1 = mild, 5 = severe)</label>
+          <div class="sev" id="sev"></div>
+        </div>
+        <div class="field" style="flex:1;min-width:200px">
+          <label for="logNote">Notes (optional)</label>
+          <input id="logNote" placeholder="e.g. spinning on waking, ear fullness">
+        </div>
+        <button class="primary" type="button" id="logBtn">Log it now</button>
+      </div>
+      <p class="sub" id="pattern" style="margin:12px 0 0"></p>
+      <ul class="log-list" id="logList"></ul>
+    </section>
+  </div>
+
+  <p class="disclaimer">
+    The risk levels are estimates built from the rate of pressure change, a pattern many people with vestibular conditions report. They aren't a diagnosis. Thresholds vary from person to person, so set your sensitivity and use the symptom log to tune them.
+    The tips are general wellness guidance, not medical advice. Follow your ENT or neurotologist's plan.
+    <strong>Call 911 if vertigo comes with sudden weakness, numbness, slurred speech, facial droop, double vision, or the worst headache of your life.</strong>
+    Weather data: <a href="https://open-meteo.com/" style="color:inherit">Open-Meteo</a>. Zip lookup: <a href="https://zippopotam.us/" style="color:inherit">Zippopotam.us</a>.
+  </p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const HPA_TO_INHG = 0.0295299830714;
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} }
+  };
+
+  // Thresholds (hPa) at "normal" sensitivity. Score >= 1 is high, >= 0.6 moderate.
+  const BASE = { t3: 2.0, t6: 3.0, t24: 6.0 };
+  const SENS = { high: 0.7, normal: 1.0, low: 1.4 };
+  const RISE_WEIGHT = 0.85; // rises matter too, but drops are reported more often
+  const LEVELS = {
+    low:  { cls: "lvl-low",  label: "Low risk" },
+    mod:  { cls: "lvl-mod",  label: "Moderate risk" },
+    high: { cls: "lvl-high", label: "High risk" }
+  };
+
+  // ---------- conditions ----------
+  // link: how consistently pressure/weather change is reported as a trigger.
+  // flags drive which general tips apply; tips are condition-specific.
+  const DEHISCENCE_TIPS = [
+    ["Protect your ears from loud sound", "Loud noise, and for some people their own loud voice or humming, can set off vertigo with a dehiscence. Carry earplugs or noise-dampening earbuds, especially on high-risk days."],
+    ["Skip pressure-raising moves", "Straining, heavy lifting, holding your breath, hard coughing, and forceful nose blowing raise pressure in the head and inner ear. Dab rather than blow, and treat constipation so you don't strain. Ask your surgeon or ENT before flying or diving."]
+  ];
+  const FISTULA_TIPS = [
+    ["Follow your activity limits", "Fistulas are usually managed with limits on lifting, straining, bending and nose blowing, plus no flying or diving until you're cleared. High-risk pressure days are a good reason to be extra strict."],
+    ["Report hearing changes the same day", "A sudden drop in hearing, new roaring tinnitus, or worse vertigo after a strain or pressure change needs a same-day call to your ENT."]
+  ];
+  const HYDROPS_TIPS = [
+    ["Keep salt and fluids steady", "Large swings in salt and fluid can shift inner-ear fluid. If your doctor has you on a low-sodium plan, spread salt evenly through the day and keep fluids steady. That matters most before a pressure change."],
+    ["Know your warning signs and keep a kit ready", "Ear fullness, louder tinnitus, or muffled hearing often come before an attack. On high-risk days keep your prescribed attack medication, water, and a safe place to lie down close by."]
+  ];
+  const MIGRAINE_TIPS = [
+    ["Watch for stacked triggers", "Weather is often a trigger that adds to others. On high-risk days, protect sleep, don't skip meals, stay hydrated, and limit bright light, screens and stress where you can."],
+    ["Treat early, per your plan", "If your doctor has given you an acute treatment, the usual advice is to take it early in an attack. A high-risk forecast is a cue to have it with you."]
+  ];
+  const UPRIGHT_TIPS = [
+    ["Build in time lying flat", "Low-CSF-pressure symptoms are often worse upright and better lying down. On high-risk days schedule lying-flat breaks, and avoid heavy lifting, straining and bending."],
+    ["Know when to call", "Clear fluid dripping from your nose or ear, a fever with stiff neck, or a sudden change in your headache pattern need prompt medical attention."]
+  ];
+  const ETD_TIPS = [
+    ["Equalize early and often", "When pressure is changing, swallow, yawn, or chew gum often to help the ear equalize. Only use a forceful Valsalva if your doctor has said it's safe for you."],
+    ["Manage congestion ahead of time", "Colds and allergies make equalizing harder. Treat congestion as your doctor advises, and avoid flying or diving with an active cold."]
+  ];
+  const CONDITIONS = [
+    { id: "general", name: "Not sure / general dizziness", link: "moderate", sens: "normal", flags: [], tips: [] },
+    { id: "scds", name: "Superior Semicircular Canal Dehiscence Syndrome (SCDS)", link: "strong", sens: "high", flags: ["sound", "valsalva"], tips: DEHISCENCE_TIPS },
+    { id: "menieres", name: "Ménière's Disease", link: "strong", sens: "high", flags: ["diet"], tips: HYDROPS_TIPS },
+    { id: "vm", name: "Vestibular Migraine", link: "strong", sens: "normal", flags: ["migraine"], tips: MIGRAINE_TIPS },
+    { id: "plf", name: "Perilymphatic Fistula (PLF)", link: "strong", sens: "high", flags: ["valsalva"], tips: FISTULA_TIPS },
+    { id: "alternobaric", name: "Alternobaric Vertigo", link: "strong", sens: "high", flags: ["equalize"], tips: [
+      ["Equalize gently and early", "Alternobaric vertigo comes from the two ears equalizing unevenly. Equalize early and often by swallowing or yawning, ascend and descend slowly when diving, and don't force it."],
+      ["Don't fly or dive congested", "A cold or allergy flare makes uneven equalizing much more likely. Postpone flights or dives if you can, or ask your doctor what to do before you go."]
+    ] },
+    { id: "etd", name: "Eustachian Tube Dysfunction (ETD)", link: "strong", sens: "high", flags: ["equalize"], tips: ETD_TIPS },
+    { id: "barotrauma", name: "Middle-Ear Barotrauma", link: "strong", sens: "high", flags: ["equalize"], tips: [
+      ["Let the ear heal", "Avoid flying and diving until your doctor clears you, and don't force your ear to equalize."],
+      ["Know when to call", "Worsening pain, hearing loss, discharge from the ear, or vertigo that won't settle needs a doctor's visit."]
+    ] },
+    { id: "thirdwindow", name: "Third-Window Syndromes", link: "strong", sens: "high", flags: ["sound", "valsalva"], tips: DEHISCENCE_TIPS },
+    { id: "hydrops", name: "Endolymphatic Hydrops", link: "strong", sens: "high", flags: ["diet"], tips: HYDROPS_TIPS },
+    { id: "neuritis", name: "Vestibular Neuritis (Residual Vestibular Dysfunction)", link: "moderate", sens: "normal", flags: ["movement"], tips: [
+      ["Keep up your exercises, just lighter", "Residual symptoms often flare with weather, fatigue or illness. On bad days do a gentler version of your vestibular rehab exercises rather than skipping them, since regular practice keeps the brain compensating."],
+      ["Rest without going still", "Short rests are fine, but staying active in small doses usually helps recovery more than a full day in bed."]
+    ] },
+    { id: "bvh", name: "Bilateral Vestibular Hypofunction (BVH)", link: "moderate", sens: "normal", flags: ["visual"], tips: [
+      ["Light your way", "With weak inner-ear balance you lean on your eyes and feet. Use nightlights, avoid walking in the dark or on uneven ground, and take a cane or walking poles on bad days."],
+      ["Be careful in water", "Swimming in dark or murky water can be disorienting when you can't see which way is up. Stick to clear, shallow water with someone nearby."]
+    ] },
+    { id: "pppd", name: "Persistent Postural-Perceptual Dizziness (PPPD)", link: "moderate", sens: "normal", flags: ["movement"], tips: [
+      ["Keep moving, don't retreat", "With PPPD, avoiding activity tends to make things worse. On a high-risk day, scale back rather than cancel: a shorter walk, a quieter store, a calmer time of day."],
+      ["Ease visual overload", "Busy patterns, crowds and fast scrolling can worsen PPPD. Take screen breaks, and use the coping strategies from your therapist (vestibular rehab or CBT)."]
+    ] },
+    { id: "bppv", name: "Benign Paroxysmal Positional Vertigo (BPPV)", link: "limited", sens: "normal", flags: ["positional"], tips: [
+      ["Change position slowly", "BPPV is set off by head position rather than weather. Roll over and sit up slowly, and sleeping slightly propped up can help."],
+      ["Use the maneuver you were taught", "If spinning starts with head movement, the repositioning maneuver your clinician taught you (such as Epley) is the usual fix. Check with them if it keeps coming back."]
+    ] },
+    { id: "schwannoma", name: "Vestibular Schwannoma (Acoustic Neuroma)", link: "limited", sens: "normal", flags: [], tips: [
+      ["Track changes for your care team", "Keep logging dizziness, hearing and tinnitus. New or worsening hearing loss, facial numbness or weakness, or worsening headaches should be reported, not waited out."],
+      ["Stay on your monitoring schedule", "Keep your scheduled scans and hearing tests. Your log helps your team spot trends."]
+    ] },
+    { id: "evas", name: "Enlarged Vestibular Aqueduct Syndrome (EVAS)", link: "strong", sens: "high", flags: ["valsalva"], tips: [
+      ["Protect your head", "People with EVAS are commonly advised to avoid head knocks and contact sports, since minor head trauma can trigger hearing drops. Ask your ENT what applies to you."],
+      ["Act fast on hearing changes", "A sudden drop in hearing is urgent with EVAS. Contact your ENT the same day. Ask them about flying and diving too."]
+    ] },
+    { id: "pscd", name: "Posterior Semicircular Canal Dehiscence", link: "strong", sens: "high", flags: ["sound", "valsalva"], tips: DEHISCENCE_TIPS },
+    { id: "lscd", name: "Lateral Semicircular Canal Dehiscence", link: "strong", sens: "high", flags: ["sound", "valsalva"], tips: DEHISCENCE_TIPS },
+    { id: "labfistula", name: "Labyrinthine Fistula", link: "strong", sens: "high", flags: ["valsalva", "sound"], tips: FISTULA_TIPS },
+    { id: "patulous", name: "Patulous Eustachian Tube", link: "moderate", sens: "normal", flags: [], tips: [
+      ["Use position to your advantage", "Hearing your own voice and breathing loudly is often worse upright and after exercise, and eases when you lie down or put your head down. Plan lying-down breaks on rough days."],
+      ["Check before using decongestants", "Decongestant sprays can make a patulous tube worse. Ask your doctor before using them, and stay well hydrated."]
+    ] },
+    { id: "paroxysmia", name: "Vestibular Paroxysmia", link: "limited", sens: "normal", flags: [], tips: [
+      ["Log the brief spells", "Paroxysmia causes short, repeated spells, often seconds long, rather than weather-driven flares. Logging each one helps your doctor judge how well treatment is working."],
+      ["Take treatment as prescribed", "If you've been prescribed medication, take it exactly as directed. Note any head positions or movements that seem to set off spells."]
+    ] },
+    { id: "ptvd", name: "Post-Traumatic Vestibular Dysfunction", link: "moderate", sens: "normal", flags: ["movement"], tips: [
+      ["Pace yourself", "After a head injury, symptoms often build with overexertion. Break tasks into chunks with rest breaks, especially screen work, and increase activity gradually as your clinicians advise."],
+      ["Keep up your rehab", "Do your vestibular rehab at a lighter level on bad days instead of skipping it."]
+    ] },
+    { id: "ptm", name: "Post-Traumatic Migraine", link: "strong", sens: "normal", flags: ["migraine"], tips: MIGRAINE_TIPS },
+    { id: "chiari", name: "Chiari Malformation", link: "moderate", sens: "normal", flags: ["valsalva"], tips: [
+      ["Avoid straining", "Coughing, sneezing, straining and heavy lifting can trigger Chiari headaches and dizziness. Treat constipation and avoid lifting heavy loads on bad days."],
+      ["Report new nerve symptoms promptly", "New numbness, weakness, trouble swallowing, or worsening balance needs a prompt call to your neurosurgeon or neurologist."]
+    ] },
+    { id: "sih", name: "Spontaneous Intracranial Hypotension", link: "moderate", sens: "normal", flags: ["upright", "valsalva"], tips: UPRIGHT_TIPS },
+    { id: "csf", name: "Cerebrospinal Fluid (CSF) Leak", link: "moderate", sens: "normal", flags: ["upright", "valsalva"], tips: UPRIGHT_TIPS }
+  ];
+  const LINK_NOTE = {
+    strong: "Pressure changes are a commonly reported trigger for this condition, so the forecast should be especially useful.",
+    moderate: "Some people with this condition notice weather and pressure effects. Fatigue and activity often matter as much. Log episodes to see if it fits you.",
+    limited: "Pressure changes aren't a well-established trigger for this condition. The forecast can still help you plan, and your log will show whether weather matters for you."
+  };
+  const cond = () => CONDITIONS.find(c => c.id === $("cond").value) || CONDITIONS[0];
+  const has = (f) => cond().flags.includes(f);
+
+  let inFrame = false; try { inFrame = window.self !== window.top; } catch { inFrame = true; }
+  let state = null; // { place, times[], p[], temp[], rh[], nowIdx, firstShown, risk[], days[] }
+  let chatHistory = [];
+  let sevChoice = 3;
+
+  // ---------- data ----------
+  async function lookupZip(zip) {
+    try {
+      const r = await fetch(`https://api.zippopotam.us/us/${zip}`);
+      if (r.ok) {
+        const j = await r.json();
+        const pl = j.places && j.places[0];
+        if (pl) return { lat: +pl.latitude, lon: +pl.longitude, name: `${pl["place name"]}, ${pl["state abbreviation"]} ${zip}` };
+      }
+    } catch (e) { /* fall through */ }
+    const r2 = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${zip}&count=5&countryCode=US&format=json`);
+    const j2 = await r2.json();
+    const hit = (j2.results || []).find(x => (x.postcodes || []).includes(zip)) || (j2.results || [])[0];
+    if (!hit) throw new Error("We couldn't find that zip code. Check the number and try again.");
+    return { lat: hit.latitude, lon: hit.longitude, name: `${hit.name}, ${hit.admin1 || ""} ${zip}`.trim() };
+  }
+
+  async function getWeather(lat, lon) {
+    const u = new URL("https://api.open-meteo.com/v1/forecast");
+    u.search = new URLSearchParams({
+      latitude: lat, longitude: lon,
+      hourly: "surface_pressure,pressure_msl,temperature_2m,relative_humidity_2m",
+      past_days: "14", forecast_days: "7", timezone: "auto", temperature_unit: "fahrenheit"
+    });
+    const r = await fetch(u);
+    if (!r.ok) throw new Error("The weather service didn't respond. Try again in a minute.");
+    return r.json();
+  }
+
+  // ---------- analysis ----------
+  function analyze(w, sens) {
+    const H = w.hourly;
+    const times = H.time.map(t => new Date(t)); // local wall-clock (timezone=auto, no offset)
+    const p = H.surface_pressure.map((v, i) => v ?? H.pressure_msl[i]);
+    const f = SENS[sens] || 1;
+    const t3 = BASE.t3 * f, t6 = BASE.t6 * f, t24 = BASE.t24 * f;
+    const risk = p.map((v, i) => {
+      const d = (h) => (i - h >= 0 && p[i - h] != null && v != null) ? v - p[i - h] : null;
+      const d3 = d(3), d6 = d(6), d24 = d(24);
+      const sc = (x, t) => x == null ? 0 : Math.abs(x) / t * (x > 0 ? RISE_WEIGHT : 1);
+      const score = Math.max(sc(d3, t3), sc(d6, t6), sc(d24, t24));
+      const level = score >= 1 ? "high" : score >= 0.6 ? "mod" : "low";
+      return { d3, d6, d24, score, level };
+    });
+    // "now" = the hour matching the location's current wall-clock time
+    const nowLocal = new Date(Date.now() + (w.utc_offset_seconds * 1000) + new Date().getTimezoneOffset() * 60000);
+    let nowIdx = times.findIndex(t => t > nowLocal) - 1;
+    if (nowIdx < 0) nowIdx = 0;
+    const firstShown = Math.max(0, nowIdx - 48);
+
+    // Daily summaries from today forward
+    const days = [];
+    const key = (t) => `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}`;
+    const todayKey = key(times[nowIdx]);
+    let started = false;
+    for (let i = 0; i < times.length; i++) {
+      const k = key(times[i]);
+      if (k === todayKey) started = true;
+      if (!started) continue;
+      let day = days[days.length - 1];
+      if (!day || day.key !== k) { day = { key: k, date: times[i], max: risk[i], maxIdx: i, hi: 0, mod: 0, swing: 0, swingIdx: i }; days.push(day); }
+      if (risk[i].score > day.max.score) { day.max = risk[i]; day.maxIdx = i; }
+      if (risk[i].level === "high") day.hi++;
+      if (risk[i].level === "mod") day.mod++;
+      if (risk[i].d24 != null && Math.abs(risk[i].d24) > Math.abs(day.swing)) { day.swing = risk[i].d24; day.swingIdx = i; }
+    }
+    return {
+      times, p, risk, nowIdx, firstShown, days: days.slice(0, 7),
+      temp: H.temperature_2m, rh: H.relative_humidity_2m, sens
+    };
+  }
+
+  // ---------- formatting ----------
+  const units = () => $("units").value;
+  const fmtP = (hpa) => units() === "hpa" ? `${hpa.toFixed(1)} hPa` : `${(hpa * HPA_TO_INHG).toFixed(2)} inHg`;
+  const fmtD = (hpa) => {
+    if (hpa == null) return "--";
+    const s = hpa > 0 ? "+" : hpa < 0 ? "−" : "±";
+    const a = Math.abs(hpa);
+    return units() === "hpa" ? `${s}${a.toFixed(1)} hPa` : `${s}${(a * HPA_TO_INHG).toFixed(2)} inHg`;
+  };
+  const dayName = (t) => t.toLocaleDateString(undefined, { weekday: "short" });
+  const dateStr = (t) => t.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const hourStr = (t) => t.toLocaleTimeString(undefined, { hour: "numeric" });
+  const whenStr = (t) => `${t.toLocaleDateString(undefined, { weekday: "short" })} ${hourStr(t)}`;
+  const partOfDay = (t) => { const h = t.getHours(); return h < 6 ? "overnight" : h < 12 ? "morning" : h < 17 ? "afternoon" : h < 21 ? "evening" : "late evening"; };
+  const badge = (el, level) => { el.className = `badge ${LEVELS[level].cls}`; el.lastElementChild.textContent = LEVELS[level].label; };
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // ---------- render ----------
+  function renderAll() {
+    if (!state) return;
+    const { times, p, risk, nowIdx, days } = state;
+    const r = risk[nowIdx];
+    $("place").textContent = `${state.place} · updated ${hourStr(new Date())}`;
+    $("nowP").textContent = fmtP(p[nowIdx]);
+    badge($("nowBadge"), r.level);
+    const dir = r.d3 == null ? "" : Math.abs(r.d3) < 0.3 ? "Holding steady" : r.d3 < 0 ? "Falling" : "Rising";
+    $("nowTrend").textContent = dir ? `${dir} right now` : "";
+    $("k3").textContent = fmtD(r.d3);
+    $("k24").textContent = fmtD(r.d24);
+    const n24 = nowIdx + 24 < p.length ? p[nowIdx + 24] - p[nowIdx] : null;
+    $("kn24").textContent = fmtD(n24);
+
+    // Outlook headline
+    let nextHigh = -1, nextMod = -1;
+    for (let i = nowIdx; i < Math.min(p.length, nowIdx + 72); i++) {
+      if (nextHigh < 0 && risk[i].level === "high") nextHigh = i;
+      if (nextMod < 0 && risk[i].level === "mod") nextMod = i;
+    }
+    let head, detail;
+    if (r.level === "high") {
+      let end = nowIdx; while (end + 1 < p.length && risk[end + 1].level === "high") end++;
+      head = "Pressure is changing fast right now.";
+      detail = `High-risk conditions are expected to last until about ${whenStr(times[end])}. Keep things gentle until then.`;
+    } else if (nextHigh >= 0) {
+      const hrs = nextHigh - nowIdx;
+      head = `High-risk swing in about ${hrs} hour${hrs === 1 ? "" : "s"} (${whenStr(times[nextHigh])}).`;
+      const d = risk[nextHigh];
+      const fall = (d.d24 ?? d.d6 ?? d.d3) < 0;
+      detail = `Pressure is forecast to ${fall ? "drop" : "rise"} quickly, typical of ${fall ? "an approaching storm or front" : "clearing weather behind a front"}. Use the time before it to get ahead of things.`;
+    } else if (nextMod >= 0) {
+      head = `Mostly calm, with moderate changes starting ${whenStr(times[nextMod])}.`;
+      detail = "No big swings expected in the next 3 days. Mild symptoms are possible if you're very sensitive.";
+    } else {
+      head = "Stable pressure for the next 3 days.";
+      detail = "A good window for activities you've been holding off on.";
+    }
+    $("outlook").textContent = head;
+    $("outlookDetail").textContent = detail;
+
+    // Days
+    $("days").innerHTML = days.map((d, i) => {
+      const lv = d.max.level;
+      const name = i === 0 ? "Today" : i === 1 ? "Tomorrow" : dayName(d.date);
+      const peak = lv !== "low" ? `<div class="dchg">Peak ${hourStr(state.times[d.maxIdx])}</div>` : "";
+      return `<div class="day ${LEVELS[lv].cls}">
+        <div class="dname">${name}</div><div class="ddate">${dateStr(d.date)}</div>
+        <span class="badge ${LEVELS[lv].cls}"><span class="dot"></span>${LEVELS[lv].label.replace(" risk", "")}</span>
+        <div class="dchg">24h swing ${fmtD(d.swing)}</div>${peak}
+      </div>`;
+    }).join("");
+
+    renderChart();
+    renderTable();
+    renderTips();
+    renderLog();
+  }
+
+  function renderChart() {
+    const svg = $("chart");
+    const { times, p, risk, nowIdx, firstShown } = state;
+    const end = p.length - 1;
+    const W = 960, Hh = 300, L = 58, R = 12, T = 12, B = 34;
+    const n = end - firstShown;
+    const X = (i) => L + (i - firstShown) / n * (W - L - R);
+    const vals = p.slice(firstShown).filter(v => v != null);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = Math.max(1.5, (hi - lo) * 0.12); lo -= pad; hi += pad;
+    const Y = (v) => T + (hi - v) / (hi - lo) * (Hh - T - B);
+    let s = "";
+    // risk bands
+    for (let i = firstShown; i <= end; i++) {
+      const lv = risk[i].level; if (lv === "low") continue;
+      let j = i; while (j + 1 <= end && risk[j + 1].level === lv) j++;
+      const x0 = X(Math.max(firstShown, i - 0.5)), x1 = X(Math.min(end, j + 0.5));
+      s += `<rect x="${x0.toFixed(1)}" y="${T}" width="${Math.max(0.5, x1 - x0).toFixed(1)}" height="${Hh - T - B}" fill="var(${lv === "high" ? "--band-high" : "--band-mod"})" shape-rendering="crispEdges"/>`;
+      i = j;
+    }
+    // y grid + labels
+    const toU = (v) => units() === "hpa" ? v : v * HPA_TO_INHG;
+    const fromU = (v) => units() === "hpa" ? v : v / HPA_TO_INHG;
+    const uLo = toU(lo), uHi = toU(hi);
+    const step = niceStep((uHi - uLo) / 5);
+    for (let g = Math.ceil(uLo / step) * step; g <= uHi; g += step) {
+      const y = Y(fromU(g));
+      s += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--grid)"/>`;
+      s += `<text x="${L - 8}" y="${y + 4}" text-anchor="end">${units() === "hpa" ? g.toFixed(0) : g.toFixed(2)}</text>`;
+    }
+    // day ticks at midnight
+    for (let i = firstShown; i <= end; i++) {
+      if (times[i].getHours() === 0) {
+        const x = X(i);
+        s += `<line x1="${x}" x2="${x}" y1="${T}" y2="${Hh - B}" stroke="var(--grid)"/>`;
+      }
+      if (times[i].getHours() === 12) s += `<text x="${X(i)}" y="${Hh - B + 18}" text-anchor="middle">${dayName(times[i])} ${times[i].getDate()}</text>`;
+    }
+    // line: past muted, future strong
+    const path = (a, b) => { let d = ""; for (let i = a; i <= b; i++) if (p[i] != null) d += `${d ? "L" : "M"}${X(i).toFixed(1)},${Y(p[i]).toFixed(1)}`; return d; };
+    s += `<path d="${path(firstShown, nowIdx)}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-opacity=".45" stroke-linejoin="round"/>`;
+    s += `<path d="${path(nowIdx, end)}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
+    // now marker
+    const nx = X(nowIdx);
+    s += `<line x1="${nx}" x2="${nx}" y1="${T}" y2="${Hh - B}" stroke="var(--text-secondary)" stroke-dasharray="3 3"/>`;
+    s += `<text x="${nx + 5}" y="${T + 12}" style="fill:var(--text-secondary);font-weight:600">Now</text>`;
+    s += `<circle cx="${nx}" cy="${Y(p[nowIdx])}" r="4.5" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"/>`;
+    // logged symptoms
+    const logs = store.get("svx_log", []);
+    logs.forEach(l => {
+      const i = idxForTime(l.t); if (i == null || i < firstShown) return;
+      s += `<circle cx="${X(i)}" cy="${Y(p[i])}" r="${4 + l.sev}" fill="var(--text-secondary)" fill-opacity=".55" stroke="var(--surface-1)" stroke-width="2"/>`;
+    });
+    // hover layer
+    s += `<line id="xh" x1="0" x2="0" y1="${T}" y2="${Hh - B}" stroke="var(--text-primary)" stroke-opacity=".35" visibility="hidden"/>`;
+    s += `<circle id="xd" r="5" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2" visibility="hidden"/>`;
+    s += `<rect id="hit" x="${L}" y="0" width="${W - L - R}" height="${Hh}" fill="transparent"/>`;
+    svg.innerHTML = s;
+
+    const tip = $("tip"), box = $("chartBox");
+    const move = (ev) => {
+      const pt = ev.touches ? ev.touches[0] : ev;
+      const rect = svg.getBoundingClientRect();
+      const sx = (pt.clientX - rect.left) / rect.width * W;
+      let i = Math.round(firstShown + (sx - L) / (W - L - R) * n);
+      i = Math.max(firstShown, Math.min(end, i));
+      const x = X(i), y = Y(p[i]);
+      $("xh").setAttribute("x1", x); $("xh").setAttribute("x2", x); $("xh").setAttribute("visibility", "visible");
+      $("xd").setAttribute("cx", x); $("xd").setAttribute("cy", y); $("xd").setAttribute("visibility", "visible");
+      const rk = risk[i];
+      tip.innerHTML = `<b>${esc(whenStr(times[i]))}${i < nowIdx ? " (past)" : ""}</b>${esc(fmtP(p[i]))}<br>3h change ${esc(fmtD(rk.d3))}<br>24h change ${esc(fmtD(rk.d24))}<br><span class="badge ${LEVELS[rk.level].cls}" style="margin-top:4px"><span class="dot"></span>${LEVELS[rk.level].label}</span>`;
+      tip.classList.remove("hidden");
+      const bx = x / W * rect.width, by = y / Hh * rect.height;
+      tip.style.left = Math.max(90, Math.min(rect.width - 90, bx)) + "px";
+      tip.style.top = Math.max(110, by) + "px";
+    };
+    const leave = () => { tip.classList.add("hidden"); $("xh").setAttribute("visibility", "hidden"); $("xd").setAttribute("visibility", "hidden"); };
+    const hit = $("hit");
+    hit.addEventListener("mousemove", move);
+    hit.addEventListener("touchmove", move, { passive: true });
+    hit.addEventListener("touchstart", move, { passive: true });
+    hit.addEventListener("mouseleave", leave);
+    hit.addEventListener("touchend", () => setTimeout(leave, 1500));
+  }
+
+  function niceStep(raw) {
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / mag;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+  }
+
+  function renderTable() {
+    const { times, p, risk, nowIdx } = state;
+    let h = `<thead><tr><th>Time</th><th>Pressure</th><th>3h change</th><th>24h change</th><th>Risk</th></tr></thead><tbody>`;
+    for (let i = nowIdx; i < p.length; i += 3) {
+      h += `<tr><td>${esc(whenStr(times[i]))}</td><td>${esc(fmtP(p[i]))}</td><td>${esc(fmtD(risk[i].d3))}</td><td>${esc(fmtD(risk[i].d24))}</td><td>${LEVELS[risk[i].level].label}</td></tr>`;
+    }
+    $("tbl").innerHTML = h + "</tbody>";
+  }
+
+  // ---------- rule-based coach ----------
+  function buildTips() {
+    const { times, p, risk, nowIdx, days, rh } = state;
+    const tips = [];
+    const add = (tag, title, body) => tips.push({ tag, title, body });
+    const now = risk[nowIdx];
+    let nextHigh = -1;
+    for (let i = nowIdx + 1; i < Math.min(p.length, nowIdx + 48); i++) if (risk[i].level === "high") { nextHigh = i; break; }
+    const highDays = days.filter(d => d.max.level === "high");
+    const calmDays = days.filter(d => d.max.level === "low");
+
+    if (now.level === "high") {
+      add("Right now", "Lower your fall risk first",
+        "Move slowly when you change position: sit up, wait a few breaths, then stand. Use handrails, keep a hand on the wall in the shower, and skip ladders, step stools and driving until it passes.");
+      if (has("sound") || has("valsalva")) add("Right now", "Give your inner ear a quiet day",
+        (has("sound") ? "Loud sounds can bring on vertigo, so keep earplugs or noise-dampening earbuds handy. " : "") +
+        "Avoid straining, heavy lifting, hard coughing, and blowing your nose forcefully (dab, or blow gently with your mouth open).");
+      if (has("equalize")) add("Right now", "Help your ears equalize",
+        "Swallow, yawn or chew gum often while pressure is moving, and don't force your ears to pop.");
+      if (has("upright")) add("Right now", "Lie flat when you can",
+        "If symptoms build when you're upright, take lying-flat breaks now rather than pushing through.");
+      add("If it starts", "Have a spin plan",
+        "Sit or lie down where you are. Fix your eyes on one still point and breathe slowly. Use any rescue medication or technique your doctor or vestibular therapist prescribed, exactly as directed.");
+    } else if (nextHigh >= 0) {
+      const t = times[nextHigh];
+      add("Prepare", `Get ahead of the ${partOfDay(t)} swing (${whenStr(t)})`,
+        `Front-load errands, driving and anything physically demanding before ${hourStr(t)}. Leave the hours after it open for low-effort tasks, and tell anyone counting on you that you may need to slow down.`);
+      if (t.getHours() < 7 || t.getHours() >= 21) {
+        add("Prepare", "Set up your bedroom for a night change",
+          "Pressure shifts overnight often show up as dizziness on waking. Put a nightlight on the route to the bathroom, keep water and your phone in reach, and sit on the edge of the bed for a minute before standing.");
+      }
+      add("Prepare", "Top up the basics today",
+        "Steady hydration, regular meals, and a normal bedtime give your balance system more room to cope." +
+        (has("diet") ? " Keep salt intake even across the day and go easy on caffeine and alcohol, following your doctor's plan."
+          : has("migraine") ? " Don't skip meals or sleep, since those triggers stack with weather."
+          : " Check with your doctor about any diet or caffeine guidance that applies to you."));
+    } else {
+      add("Calm stretch", "Use the stable window",
+        "Steady pressure is a good time for your vestibular rehab exercises, a walk, appointments, or travel you've been putting off.");
+    }
+
+    if (highDays.length) {
+      add("This week", `Plan around ${highDays.length} rough day${highDays.length > 1 ? "s" : ""}`,
+        `Watch ${highDays.map(d => dayName(d.date)).join(", ")}. Keep those calendars light and avoid flying, scuba, mountain drives, or very tall elevators on those days, since external pressure changes add to the load.` +
+        (calmDays.length ? ` Steadier days for bigger plans: ${calmDays.map(d => dayName(d.date)).join(", ")}.` : ""));
+    }
+
+    // condition-specific
+    const c = cond();
+    c.tips.forEach(([title, body]) => add(c.id === "general" ? "General" : "For your condition", title, body));
+    if (c.link === "limited") add("For your condition", "Weather may matter less for you",
+      LINK_NOTE.limited);
+
+    // falling vs rising character
+    const look = risk.slice(nowIdx, nowIdx + 48).filter(x => x.d24 != null);
+    if (look.length) {
+      const minD = Math.min(...look.map(x => x.d24)), maxD = Math.max(...look.map(x => x.d24));
+      if (-minD > maxD && -minD > BASE.t24 * 0.6) add("Pattern", "A falling-pressure pattern is coming",
+        "Falling pressure, usually ahead of rain or a storm, is the pattern most people with pressure-sensitive vertigo notice. Ear fullness, headache, or brain fog can be early signs. Treat them as a cue to slow down.");
+      else if (maxD > BASE.t24 * 0.6) add("Pattern", "A rising-pressure pattern is coming",
+        "Fast rises behind a cold front can trigger symptoms too, often as a sudden pressure or imbalance. The same plan applies: ease off and keep your fall precautions in place.");
+    }
+
+    const rhNow = rh[nowIdx];
+    if (rhNow != null && rhNow > 85 && (now.level !== "low" || nextHigh >= 0)) {
+      add("Comfort", "Humid and muggy too",
+        `Humidity is about ${Math.round(rhNow)}%. Some people find heavy, humid air makes head and ear fullness worse, so a cool, dry room and fluids can help.`);
+    }
+
+    const pat = learnPattern();
+    if (pat && pat.n >= 3) {
+      add("Your pattern", "What your log shows",
+        `In ${pat.n} logged episodes, pressure had shifted by ${fmtD(pat.avg24)} on average over the 24 hours before. ${pat.suggest}`);
+    } else {
+      add("Learn", "Log episodes to personalize this",
+        "Thresholds differ a lot between people. Log a few episodes below and the coach will start comparing them with the pressure history.");
+    }
+    return tips;
+  }
+
+  function renderTips() {
+    $("tips").innerHTML = buildTips().map(t => `<li><span class="tag">${esc(t.tag)}</span><span class="tt">${esc(t.title)}</span>${esc(t.body)}</li>`).join("");
+  }
+
+  // ---------- symptom log ----------
+  function idxForTime(ms) {
+    if (!state) return null;
+    // log timestamps are stored as absolute ms; compare against location wall-clock
+    const local = new Date(ms + state.utcOffset * 1000 + new Date(ms).getTimezoneOffset() * 60000);
+    const t0 = state.times[0].getTime();
+    const i = Math.round((local.getTime() - t0) / 3600000);
+    return i >= 0 && i < state.times.length ? i : null;
+  }
+
+  function learnPattern() {
+    if (!state) return null;
+    const logs = store.get("svx_log", []);
+    const d24s = [];
+    logs.forEach(l => { const i = idxForTime(l.t); if (i != null && state.risk[i].d24 != null) d24s.push(state.risk[i].d24); });
+    if (!d24s.length) return null;
+    const avgAbs = d24s.reduce((a, b) => a + Math.abs(b), 0) / d24s.length;
+    const avg24 = d24s.reduce((a, b) => a + b, 0) / d24s.length;
+    const thr = BASE.t24 * SENS[state.sens];
+    let suggest = "Your current sensitivity setting looks about right.";
+    if (avgAbs < thr * 0.55 && state.sens !== "high") suggest = "That's smaller than this setting expects, so try switching sensitivity to High.";
+    else if (avgAbs > thr * 1.5 && state.sens !== "low") suggest = "You seem to react mainly to big swings, so Low sensitivity may give fewer false alarms.";
+    return { n: d24s.length, avg24, avgAbs, suggest };
+  }
+
+  function renderLog() {
+    const logs = store.get("svx_log", []).slice().sort((a, b) => b.t - a.t);
+    $("logList").innerHTML = logs.slice(0, 20).map(l => {
+      const d = new Date(l.t);
+      return `<li><span><strong>${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</strong> · severity ${l.sev}${l.note ? " · " + esc(l.note) : ""}</span><button class="ghost" data-t="${l.t}" type="button">Remove</button></li>`;
+    }).join("") || `<li class="note">No episodes logged yet.</li>`;
+    const pat = learnPattern();
+    $("pattern").textContent = pat
+      ? `${pat.n} episode${pat.n > 1 ? "s fall" : " falls"} inside the last 14 days of pressure data. Average 24-hour change before them: ${fmtD(pat.avg24)}. ${pat.n >= 3 ? pat.suggest : "Log a few more to see a pattern."}`
+      : "";
+  }
+
+  // ---------- AI coach ----------
+  function forecastContext() {
+    const { times, p, risk, nowIdx, days, temp, rh } = state;
+    const lines = [];
+    lines.push(`Condition: ${cond().name}. Location: ${state.place}. Sensitivity setting: ${state.sens}. Current local time: ${whenStr(times[nowIdx])}.`);
+    lines.push(`Now: ${fmtP(p[nowIdx])}, 3h change ${fmtD(risk[nowIdx].d3)}, 24h change ${fmtD(risk[nowIdx].d24)}, risk ${LEVELS[risk[nowIdx].level].label}, ${Math.round(temp[nowIdx])}°F, humidity ${Math.round(rh[nowIdx])}%.`);
+    lines.push("Daily outlook:");
+    days.forEach(d => lines.push(`- ${dayName(d.date)} ${dateStr(d.date)}: ${LEVELS[d.max.level].label}, biggest 24h swing ${fmtD(d.swing)}, peak ${hourStr(times[d.maxIdx])}, ${d.hi} high-risk hours.`));
+    lines.push("Next 48 hours, every 3 hours:");
+    for (let i = nowIdx; i < Math.min(p.length, nowIdx + 48); i += 3) lines.push(`- ${whenStr(times[i])}: ${fmtP(p[i])} (3h ${fmtD(risk[i].d3)}) ${LEVELS[risk[i].level].label}`);
+    const logs = store.get("svx_log", []).slice(-15);
+    if (logs.length) {
+      lines.push("User's recent symptom log:");
+      logs.forEach(l => { const i = idxForTime(l.t); lines.push(`- ${new Date(l.t).toLocaleString()}: severity ${l.sev}/5${l.note ? ", " + l.note : ""}${i != null && risk[i].d24 != null ? `, 24h pressure change then ${fmtD(risk[i].d24)}` : ""}`); });
+    }
+    return lines.join("\n");
+  }
+
+  const SYSTEM = () => {
+    const c = cond();
+    const who = c.id === "general" ? "a person with dizziness or vertigo who hasn't specified a condition"
+      : `a person with ${c.name}`;
+    return `You are a supportive, practical coach inside an app that forecasts barometric pressure changes for ${who}.
+How strongly pressure is linked to their condition: ${c.link}. ${LINK_NOTE[c.link]} Be honest about this; don't overstate the weather link when it is limited.
+Your job: help them plan around the forecast and manage symptoms day to day, tailored to their condition. Be warm, concrete and brief (under ~180 words unless asked for more). Use the forecast data you are given; refer to specific days and times.
+Good territory: pacing and scheduling around risky windows, fall prevention, home setup, sleep, hydration, regular meals, caffeine/alcohol/salt moderation where relevant to their condition, avoiding straining/Valsalva where relevant, noise exposure where relevant, ear equalization where relevant, travel and flying considerations, grounding and gaze-fixation during an episode, staying active and vestibular rehab, stress and anxiety coping, tracking symptoms, and questions to bring to their ENT, neurotologist, neurologist or vestibular therapist.
+Limits: you are not their doctor. Do not diagnose, do not recommend starting, stopping or dosing medications (say to follow their prescriber's plan), and do not suggest unproven devices or supplements as treatments. If they describe red flags (sudden weakness, numbness, slurred speech, facial droop, double vision, severe sudden headache, fainting, new hearing loss, or vertigo unlike their usual), tell them to seek emergency care or call 911 now.
+Plain text only, no markdown headers. Short bullet lines with "-" are fine.`;
+  };
+
+  async function askCoach(q) {
+    const key = store.get("svx_key", "");
+    if (!key) { addMsg("bot", "Add your Anthropic API key above to chat with the AI coach. The tips on the left work without one."); return; }
+    if (!state) return;
+    addMsg("user", q);
+    chatHistory.push({ role: "user", content: q });
+    const bot = addMsg("bot", "Thinking…");
+    $("chatSend").disabled = true;
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-5-5",
+          max_tokens: 900,
+          system: SYSTEM() +"\n\nCURRENT FORECAST DATA:\n" + forecastContext(),
+          messages: chatHistory.slice(-12)
+        })
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error?.message || `HTTP ${r.status}`);
+      const text = (j.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
+      bot.textContent = text || "(No answer came back.)";
+      chatHistory.push({ role: "assistant", content: bot.textContent });
+    } catch (e) {
+      bot.textContent = `The coach couldn't answer: ${e.message}`;
+      chatHistory.pop();
+    } finally {
+      $("chatSend").disabled = false;
+      $("msgs").scrollTop = $("msgs").scrollHeight;
+    }
+  }
+  function addMsg(who, text) {
+    const d = document.createElement("div");
+    d.className = `msg ${who}`; d.textContent = text;
+    $("msgs").appendChild(d); $("msgs").scrollTop = $("msgs").scrollHeight;
+    return d;
+  }
+  function refreshKeyUI() {
+    const has = !!store.get("svx_key", "");
+    $("keyBox").classList.toggle("hidden", has);
+    $("forgetKey").classList.toggle("hidden", !has);
+  }
+
+  // ---------- wiring ----------
+  async function run(zip) {
+    const st = $("status");
+    st.className = "status"; st.textContent = "Looking up your area…";
+    $("go").disabled = true;
+    try {
+      const loc = await lookupZip(zip);
+      st.textContent = `Getting the pressure forecast for ${loc.name}…`;
+      const w = await getWeather(loc.lat, loc.lon);
+      state = analyze(w, $("sens").value);
+      state.place = loc.name; state.utcOffset = w.utc_offset_seconds; state.raw = w;
+      store.set("svx_zip", zip);
+      st.textContent = "";
+      $("results").classList.remove("hidden");
+      renderAll();
+    } catch (e) {
+      st.className = "status err";
+      const network = e instanceof TypeError || /fetch|network|load failed/i.test(e.message || "");
+      st.textContent = !network ? e.message
+        : inFrame
+          ? "This preview blocks the app from reaching the weather service. Download the file and open it in Chrome, Safari or Edge instead."
+          : "Couldn't reach the weather service. Check your internet connection, or try a different browser, and try again.";
+    } finally { $("go").disabled = false; }
+  }
+
+  function submitZip() {
+    const z = $("zip").value.replace(/\D/g, "").slice(0, 5);
+    $("zip").value = z;
+    if (!/^\d{5}$/.test(z)) { $("status").className = "status err"; $("status").textContent = "Enter a 5-digit US zip code."; return; }
+    run(z);
+  }
+  // Click and Enter are handled directly so the button works even where form submission is blocked.
+  $("go").addEventListener("click", submitZip);
+  $("zip").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitZip(); } });
+  $("form").addEventListener("submit", (e) => { e.preventDefault(); submitZip(); });
+  $("sens").addEventListener("change", () => { store.set("svx_sens", $("sens").value); if (state) { const keep = { place: state.place, utcOffset: state.utcOffset, raw: state.raw }; state = Object.assign(analyze(keep.raw, $("sens").value), keep); renderAll(); } });
+  $("units").addEventListener("change", () => { store.set("svx_units", $("units").value); renderAll(); });
+
+  $("sev").innerHTML = [1, 2, 3, 4, 5].map(n => `<button type="button" data-s="${n}" class="${n === sevChoice ? "on" : ""}">${n}</button>`).join("");
+  $("sev").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    sevChoice = +b.dataset.s;
+    [...$("sev").children].forEach(c => c.classList.toggle("on", +c.dataset.s === sevChoice));
+  });
+  $("logBtn").addEventListener("click", () => {
+    const logs = store.get("svx_log", []);
+    logs.push({ t: Date.now(), sev: sevChoice, note: $("logNote").value.trim().slice(0, 140) });
+    store.set("svx_log", logs.slice(-200));
+    $("logNote").value = "";
+    renderAll();
+  });
+  $("logList").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-t]"); if (!b) return;
+    store.set("svx_log", store.get("svx_log", []).filter(l => String(l.t) !== b.dataset.t));
+    renderAll();
+  });
+
+  $("saveKey").addEventListener("click", () => { const k = $("apiKey").value.trim(); if (k) { store.set("svx_key", k); $("apiKey").value = ""; refreshKeyUI(); } });
+  $("forgetKey").addEventListener("click", () => { store.del("svx_key"); refreshKeyUI(); });
+  const sendChat = () => { const q = $("chatIn").value.trim(); if (!q) return; $("chatIn").value = ""; askCoach(q); };
+  $("chatSend").addEventListener("click", sendChat);
+  $("chatIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendChat(); } });
+  $("chatForm").addEventListener("submit", (e) => { e.preventDefault(); sendChat(); });
+  $("chips").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) askCoach(b.textContent); });
+
+  // condition dropdown
+  $("cond").innerHTML = CONDITIONS.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  const SENS_LABEL = { high: "High", normal: "Normal", low: "Low" };
+  function updateCondNote(applied) {
+    const c = cond();
+    $("condNote").textContent = LINK_NOTE[c.link] +
+      (applied ? ` Sensitivity set to ${SENS_LABEL[c.sens]} as a starting point. You can change it.` : "");
+  }
+  function reanalyze() {
+    if (!state) return;
+    const keep = { place: state.place, utcOffset: state.utcOffset, raw: state.raw };
+    state = Object.assign(analyze(keep.raw, $("sens").value), keep);
+    renderAll();
+  }
+  $("cond").addEventListener("change", () => {
+    store.set("svx_cond", $("cond").value);
+    $("sens").value = cond().sens; store.set("svx_sens", cond().sens);
+    updateCondNote(true);
+    chatHistory = []; $("msgs").innerHTML = "";
+    reanalyze();
+  });
+
+  // restore
+  $("cond").value = store.get("svx_cond", "general");
+  if (!$("cond").value) $("cond").value = "general";
+  updateCondNote(false);
+  $("sens").value = store.get("svx_sens", "normal");
+  $("units").value = store.get("svx_units", "inhg");
+  refreshKeyUI();
+  const z = store.get("svx_zip", "");
+  if (z) { $("zip").value = z; run(z); }
+  else if (inFrame) $("status").textContent = "If the forecast doesn't load in this preview, download the file and open it in your web browser.";
+
+  // expose for testing
+  window.__svx = { analyze, buildTips: () => buildTips(), setState: (s) => { state = s; renderAll(); } };
+})();
+</script>
+</body>
+</html>
